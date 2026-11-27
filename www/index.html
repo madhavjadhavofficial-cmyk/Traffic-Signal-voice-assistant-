@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Smart City Traffic Light Voice Assistant</title>
+<meta name="theme-color" content="#0b1420">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+<style>
+:root{--bg:#0b1420;--panel:#142235;--line:#2b405a;--text:#f3f7fb;--mute:#a9bbcf;--acc:#5cc8ff;--red:#ff4d4d;--yel:#ffd23f;--grn:#37d67a;--warn:#ffb84d;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--bg:#eef3f9;--panel:#fff;--line:#b9c8da;--text:#0b1420;--mute:#41546b;--acc:#0a5fa8;--warn:#8a5200}}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:18px/1.5 "Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:14px}
+h1{font-size:1.35rem;margin:6px 0 2px}h2{font-size:1.05rem;margin:0 0 10px}
+.sub{color:var(--mute);font-size:.9rem;margin:0 0 12px}
+.card{background:var(--panel);border:2px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.grid{display:grid;gap:12px;grid-template-columns:1fr}
+@media(min-width:800px){.grid{grid-template-columns:1.2fr 1fr}}
+.sig{display:flex;align-items:center;gap:16px}
+.lamp{width:92px;height:92px;border-radius:50%;border:6px solid var(--line);background:#222c3a;flex:none;transition:background .2s}
+.lamp.red{background:var(--red);border-color:#fff}.lamp.yellow{background:var(--yel);border-color:#fff}.lamp.green{background:var(--grn);border-color:#fff}
+.big{font-size:2rem;font-weight:700;line-height:1.1}
+.cam{position:relative;background:#000;border-radius:10px;overflow:hidden;aspect-ratio:4/3}
+.cam canvas{width:100%;height:100%;display:block;object-fit:contain}
+.cam .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:16px;color:#cdd8e5}
+.row{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+button{font:inherit;font-weight:700;min-height:52px;padding:10px 16px;border-radius:12px;border:2px solid var(--acc);background:transparent;color:var(--text);cursor:pointer;flex:1 1 140px}
+button.pri{background:var(--acc);color:#04121f}
+button:disabled{opacity:.45;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:4px solid var(--warn);outline-offset:2px}
+label{display:block;margin:10px 0 4px;font-weight:700}
+input[type=text],input[type=url],select{width:100%;min-height:48px;font:inherit;padding:8px 10px;border-radius:10px;border:2px solid var(--line);background:var(--bg);color:var(--text)}
+input[type=range]{width:100%;height:36px}
+dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0}dt{color:var(--mute)}dd{margin:0;font-weight:700;text-align:right}
+.ok{color:var(--grn)}.bad{color:var(--red)}.mid{color:var(--yel)}
+.banner{border:2px solid var(--warn);color:var(--warn);border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:.95rem}
+.msg{min-height:1.5em;margin-top:8px;font-size:.95rem}
+details summary{cursor:pointer;font-weight:700;min-height:44px;display:flex;align-items:center}
+</style>
+</head>
+<body>
+<main>
+<h1>Smart City Traffic Light Voice Assistant</h1>
+<p class="sub">ESP32-CAM traffic light detection with spoken alerts for visually impaired pedestrians.</p>
+
+<div class="banner" id="modeBanner" role="note"></div>
+
+<div class="grid">
+<section>
+  <div class="card" aria-labelledby="hSig">
+    <h2 id="hSig">Detected signal</h2>
+    <div class="sig">
+      <div class="lamp" id="lamp" aria-hidden="true"></div>
+      <div>
+        <div class="big" id="sigText" aria-live="polite">Detection stopped</div>
+        <div id="confText" class="sub" style="margin:4px 0 0">Confidence: –</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" aria-labelledby="hCam">
+    <h2 id="hCam">Live camera</h2>
+    <div class="cam">
+      <canvas id="view" width="320" height="240" aria-label="Live ESP32-CAM view"></canvas>
+      <div class="ph" id="ph">Camera not connected. Enter the camera address below and press Connect.</div>
+    </div>
+    <div class="row">
+      <button class="pri" id="bConnect">Connect</button>
+      <button id="bDisconnect" disabled>Disconnect</button>
+      <button id="bReconnect" disabled>Reconnect</button>
+    </div>
+    <div class="row">
+      <button class="pri" id="bDetect" disabled>Start Detection</button>
+    </div>
+    <div class="msg" id="camMsg" role="status" aria-live="polite"></div>
+  </div>
+</section>
+
+<section>
+  <div class="card" aria-labelledby="hDash">
+    <h2 id="hDash">Dashboard</h2>
+    <dl>
+      <dt>Camera</dt><dd id="dCam" class="bad">Disconnected</dd>
+      <dt>Detection</dt><dd id="dDet">Stopped</dd>
+      <dt>Signal</dt><dd id="dSig">–</dd>
+      <dt>Confidence</dt><dd id="dConf">–</dd>
+      <dt>Voice assistant</dt><dd id="dVoice">On</dd>
+      <dt>Last detection</dt><dd id="dLast">–</dd>
+      <dt>Network</dt><dd id="dNet">Online</dd>
+    </dl>
+  </div>
+
+  <div class="card" aria-labelledby="hVoice">
+    <h2 id="hVoice">Voice assistant</h2>
+    <div class="row" style="margin-top:0">
+      <button id="bVoice" aria-pressed="true">Voice: On</button>
+      <button id="bRepeat">Repeat announcement</button>
+    </div>
+    <label for="vol">Volume: <span id="volVal">100</span>%</label>
+    <input type="range" id="vol" min="0" max="100" value="100">
+    <label for="mode">Announcement mode</label>
+    <select id="mode">
+      <option value="demo">Demonstration (custom phrases)</option>
+      <option value="real">Real-world safety guidance</option>
+    </select>
+    <details id="phr">
+      <summary>Edit demonstration phrases</summary>
+      <label for="pRed">Red</label><input type="text" id="pRed">
+      <label for="pYel">Yellow</label><input type="text" id="pYel">
+      <label for="pGrn">Green</label><input type="text" id="pGrn">
+    </details>
+  </div>
+
+  <div class="card" aria-labelledby="hSet">
+    <h2 id="hSet">Camera settings</h2>
+    <label for="url">ESP32-CAM address or HTTPS URL</label>
+    <input type="url" id="url" inputmode="url" placeholder="https://cam.example.com or http://192.168.1.50" autocomplete="off">
+    <label for="path">Frame path</label>
+    <input type="text" id="path" value="/capture">
+    <p class="sub">The page reads still frames from the ESP32-CAM <code>/capture</code> endpoint about 4 times a second. On an HTTPS site the camera must also be reachable over HTTPS (for example through a tunnel).</p>
+  </div>
+</section>
+</div>
+
+<p class="sub">Traffic light detection by camera cannot guarantee road safety. Never rely on this app alone to cross a road.</p>
+</main>
+
+<canvas id="work" width="160" height="120" hidden></canvas>
+
+<script>
+(function(){
+'use strict';
+var $=function(id){return document.getElementById(id)};
+var store={get:function(k,d){try{var v=localStorage.getItem(k);return v===null?d:v}catch(e){return d}},set:function(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+
+/* ---------- PWA manifest (inline) ---------- */
+try{
+var icon='data:image/svg+xml;utf8,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" fill="#0b1420"/><rect x="176" y="64" width="160" height="384" rx="40" fill="#142235" stroke="#5cc8ff" stroke-width="12"/><circle cx="256" cy="146" r="40" fill="#ff4d4d"/><circle cx="256" cy="256" r="40" fill="#ffd23f"/><circle cx="256" cy="366" r="40" fill="#37d67a"/></svg>');
+var man={name:'Smart City Traffic Light Voice Assistant',short_name:'Signal Voice',display:'fullscreen',orientation:'portrait',background_color:'#0b1420',theme_color:'#0b1420',start_url:'.',icons:[{src:icon,sizes:'512x512',type:'image/svg+xml',purpose:'any maskable'}]};
+var l=document.createElement('link');l.rel='manifest';l.href=URL.createObjectURL(new Blob([JSON.stringify(man)],{type:'application/manifest+json'}));document.head.appendChild(l);
+var a=document.createElement('link');a.rel='icon';a.href=icon;document.head.appendChild(a);
+}catch(e){}
+
+/* ---------- State ---------- */
+var S={wantConn:false,connected:false,detecting:false,voice:store.get('voice','1')==='1',loop:0,tries:0,
+ stable:'none',cand:'none',candN:0,spoken:null,lastTime:null,failCount:0,timer:null};
+var STABLE_N=3, FRAME_MS=250;
+var DEFAULT_PH={red:'You can cross the road.',yellow:'Please wait.',green:'Stop.'};
+var REAL={red:'Vehicle signal is red. Stop and wait. Walk only when the pedestrian signal permits.',
+ yellow:'Wait. Do not start crossing. Walk only when the pedestrian signal permits.',
+ green:'Stop and wait. Walk only when the pedestrian signal permits.'};
+
+/* ---------- Init UI from storage ---------- */
+$('url').value=store.get('url','');
+$('path').value=store.get('path','/capture');
+$('vol').value=store.get('vol','100');$('volVal').textContent=$('vol').value;
+$('mode').value=store.get('mode','demo');
+$('pRed').value=store.get('pRed',DEFAULT_PH.red);
+$('pYel').value=store.get('pYel',DEFAULT_PH.yellow);
+$('pGrn').value=store.get('pGrn',DEFAULT_PH.green);
+function banner(){
+ var b=$('modeBanner');
+ if($('mode').value==='demo'){b.textContent='Demonstration mode: these phrases are for demonstration only. They are not safe real-world crossing instructions.';}
+ else{b.textContent='Real-world mode: the app says STOP and WAIT, and WALK only when the pedestrian crossing signal permits. The camera alone cannot guarantee safety.';}
+}
+banner();voiceUI();
+
+function phrase(c){
+ if($('mode').value==='real')return REAL[c];
+ return ({red:$('pRed').value,yellow:$('pYel').value,green:$('pGrn').value})[c]||DEFAULT_PH[c];
+}
+
+/* ---------- Voice ---------- */
+var voices=[];
+function loadVoices(){try{voices=speechSynthesis.getVoices()||[]}catch(e){}}
+if('speechSynthesis' in window){loadVoices();speechSynthesis.onvoiceschanged=loadVoices;}
+function speak(text){
+ if(!('speechSynthesis' in window)){msg('Speech is not supported on this device.');return}
+ try{
+  speechSynthesis.cancel();
+  var u=new SpeechSynthesisUtterance(text);
+  u.lang='en-US';u.volume=Number($('vol').value)/100;u.rate=0.95;
+  var v=voices.filter(function(x){return /^en/i.test(x.lang)})[0];if(v)u.voice=v;
+  speechSynthesis.speak(u);
+ }catch(e){msg('Speech failed: '+e.message)}
+}
+function voiceUI(){
+ $('bVoice').textContent='Voice: '+(S.voice?'On':'Off');
+ $('bVoice').setAttribute('aria-pressed',S.voice);
+ $('dVoice').textContent=S.voice?'On':'Off';
+}
+$('bVoice').onclick=function(){S.voice=!S.voice;store.set('voice',S.voice?'1':'0');voiceUI();if(!S.voice&&'speechSynthesis' in window)speechSynthesis.cancel();else speak('Voice assistant on.');};
+$('bRepeat').onclick=function(){
+ if(!S.voice){msg('Turn the voice assistant on to hear announcements.');return}
+ if(S.stable==='none'){speak('No traffic light detected.');return}
+ speak(phrase(S.stable));
+};
+$('vol').oninput=function(){$('volVal').textContent=this.value;store.set('vol',this.value)};
+$('vol').onchange=function(){if(S.voice)speak('Volume set to '+this.value+' percent.')};
+$('mode').onchange=function(){store.set('mode',this.value);banner();S.spoken=null;};
+['pRed','pYel','pGrn'].forEach(function(id){$(id).oninput=function(){store.set(id,this.value)}});
+
+/* ---------- Helpers ---------- */
+function msg(t){$('camMsg').textContent=t}
+function setCam(label,cls){var e=$('dCam');e.textContent=label;e.className=cls}
+function net(){$('dNet').textContent=navigator.onLine?'Online':'Offline'}
+function buildUrl(){
+ var base=$('url').value.trim().replace(/\/+$/,'');
+ if(!base)return null;
+ if(!/^https?:\/\//i.test(base))base='http://'+base;
+ var p=$('path').value.trim()||'/capture';if(p[0]!=='/')p='/'+p;
+ return {base:base,full:base+p};
+}
+function ctrls(){
+ $('bConnect').disabled=S.wantConn;
+ $('bDisconnect').disabled=!S.wantConn;
+ $('bReconnect').disabled=!S.wantConn;
+ $('bDetect').disabled=!S.connected;
+ $('bDetect').textContent=S.detecting?'Stop Detection':'Start Detection';
+ $('dDet').textContent=S.detecting?'Running':'Stopped';
+}
+
+/* ---------- Connection loop (still-frame polling) ---------- */
+var view=$('view'),vctx=view.getContext('2d'),work=$('work'),wctx=work.getContext('2d',{willReadFrequently:true});
+function startLoop(){
+ var my=++S.loop;clearTimeout(S.timer);
+ var u=buildUrl();
+ if(!u){msg('Enter the ESP32-CAM address first.');S.wantConn=false;ctrls();return}
+ if(location.protocol==='https:'&&u.base.indexOf('http://')===0){
+  S.wantConn=false;setCam('Blocked','bad');ctrls();
+  msg('This page uses HTTPS, so the browser blocks a plain http camera address. Use an HTTPS address (tunnel or reverse proxy) for the ESP32-CAM, or open this app from a local http page on the same Wi-Fi.');return;
+ }
+ store.set('url',$('url').value.trim());store.set('path',$('path').value.trim());
+ setCam(S.tries?'Reconnecting…':'Connecting…','mid');msg(S.tries?'Reconnecting to the camera (attempt '+S.tries+')…':'Connecting to the camera…');
+ (function next(){
+  if(my!==S.loop||!S.wantConn)return;
+  if(!navigator.onLine){fail(my,'No network connection. Waiting for the network to return.');return}
+  var img=new Image();img.crossOrigin='anonymous';
+  var done=false;
+  var to=setTimeout(function(){if(!done){done=true;img.src='';fail(my,'The camera did not respond in time.')}},6000);
+  img.onload=function(){
+   if(done||my!==S.loop)return;done=true;clearTimeout(to);
+   S.tries=0;
+   if(!S.connected){S.connected=true;setCam('Connected','ok');msg('Camera connected.');$('ph').style.display='none';ctrls();}
+   try{frame(img)}catch(e){msg('Cannot read camera frames (CORS blocked or image error).')}
+   S.timer=setTimeout(next,FRAME_MS);
+  };
+  img.onerror=function(){if(done||my!==S.loop)return;done=true;clearTimeout(to);fail(my,'Cannot reach the camera. Check power, Wi-Fi, address and that the camera allows requests from this page.')};
+  img.src=u.full+(u.full.indexOf('?')>-1?'&':'?')+'t='+Date.now();
+ })();
+}
+function fail(my,text){
+ if(my!==S.loop||!S.wantConn)return;
+ var wasConn=S.connected;S.connected=false;S.tries++;
+ setCam('Reconnecting…','mid');msg(text+' Retrying automatically.');
+ $('ph').style.display='flex';$('ph').textContent=text;
+ resetDetect();ctrls();
+ if(wasConn&&S.voice&&S.tries===1)speak('Camera connection lost.');
+ S.timer=setTimeout(startLoopKeep,Math.min(1000*Math.pow(2,Math.min(S.tries,3)),8000));
+}
+function startLoopKeep(){var t=S.tries;startLoop();S.tries=t}
+$('bConnect').onclick=function(){S.wantConn=true;S.tries=0;S.connected=false;ctrls();startLoop()};
+$('bDisconnect').onclick=function(){
+ S.wantConn=false;S.connected=false;S.detecting=false;S.loop++;clearTimeout(S.timer);
+ setCam('Disconnected','bad');msg('Camera disconnected.');$('ph').style.display='flex';$('ph').textContent='Camera not connected. Enter the camera address below and press Connect.';
+ vctx.clearRect(0,0,view.width,view.height);resetDetect();ctrls();
+};
+$('bReconnect').onclick=function(){S.tries=0;S.connected=false;S.loop++;clearTimeout(S.timer);ctrls();startLoop()};
+$('bDetect').onclick=function(){
+ S.detecting=!S.detecting;resetDetect();ctrls();
+ if(S.detecting){msg('Detection started.');}else{msg('Detection stopped.');show('none',0,true)}
+};
+window.addEventListener('online',function(){net();if(S.wantConn){S.tries=0;S.loop++;clearTimeout(S.timer);startLoop()}});
+window.addEventListener('offline',function(){net();if(S.wantConn)msg('Network lost. The app will reconnect when the network returns.')});
+document.addEventListener('visibilitychange',function(){
+ if(document.visibilityState==='visible'&&S.wantConn){S.tries=0;S.loop++;clearTimeout(S.timer);startLoop()}
+});
+net();ctrls();
+
+/* ---------- Image processing ---------- */
+function rgb2hsv(r,g,b){
+ r/=255;g/=255;b/=255;var mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn,h=0;
+ if(d){if(mx===r)h=((g-b)/d)%6;else if(mx===g)h=(b-r)/d+2;else h=(r-g)/d+4;h*=60;if(h<0)h+=360}
+ return [h,mx?d/mx:0,mx];
+}
+function classify(h,s,v){
+ if(v<0.55||s<0.45)return 0;
+ if(h<15||h>345)return 1;      /* red */
+ if(h>=38&&h<=70)return 2;     /* yellow */
+ if(h>=85&&h<=175)return 3;    /* green */
+ return 0;
+}
+var NAMES=['none','red','yellow','green'];
+function detect(){
+ var W=work.width,H=work.height,data=wctx.getImageData(0,0,W,H).data,n=W*H;
+ var cls=new Uint8Array(n),dark=new Uint8Array(n);
+ for(var i=0,p=0;i<n;i++,p+=4){
+  var hsv=rgb2hsv(data[p],data[p+1],data[p+2]);
+  cls[i]=classify(hsv[0],hsv[1],hsv[2]);
+  dark[i]=hsv[2]<0.35?1:0;
+ }
+ var seen=new Uint8Array(n),best=null,stack=[];
+ for(var s0=0;s0<n;s0++){
+  if(!cls[s0]||seen[s0])continue;
+  var c=cls[s0],area=0,x0=W,y0=H,x1=0,y1=0;
+  stack.length=0;stack.push(s0);seen[s0]=1;
+  while(stack.length){
+   var q=stack.pop(),x=q%W,y=(q-x)/W;area++;
+   if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;
+   if(x>0&&cls[q-1]===c&&!seen[q-1]){seen[q-1]=1;stack.push(q-1)}
+   if(x<W-1&&cls[q+1]===c&&!seen[q+1]){seen[q+1]=1;stack.push(q+1)}
+   if(y>0&&cls[q-W]===c&&!seen[q-W]){seen[q-W]=1;stack.push(q-W)}
+   if(y<H-1&&cls[q+W]===c&&!seen[q+W]){seen[q+W]=1;stack.push(q+W)}
+  }
+  var bw=x1-x0+1,bh=y1-y0+1;
+  if(area<10||area>900)continue;
+  var asp=bw/bh;if(asp<0.6||asp>1.6)continue;
+  var fill=area/(bw*bh);if(fill<0.55)continue;
+  /* housing check: dark pixels in the ring around the lamp */
+  var m=Math.round(Math.max(bw,bh)*1.2),ex0=Math.max(0,x0-m),ey0=Math.max(0,y0-m),ex1=Math.min(W-1,x1+m),ey1=Math.min(H-1,y1+m),ring=0,dk=0;
+  for(var yy=ey0;yy<=ey1;yy++)for(var xx=ex0;xx<=ex1;xx++){
+   if(xx>=x0&&xx<=x1&&yy>=y0&&yy<=y1)continue;
+   ring++;if(dark[yy*W+xx])dk++;
+  }
+  if(!ring)continue;
+  var dr=dk/ring;if(dr<0.5)continue;
+  var conf=0.35*Math.min(1,fill/0.78)+0.65*Math.min(1,dr/0.85);
+  if(conf<0.55)continue;
+  if(!best||conf>best.conf)best={c:c,conf:conf,x:x0,y:y0,w:bw,h:bh};
+ }
+ return best;
+}
+function frame(img){
+ var vw=img.naturalWidth||320,vh=img.naturalHeight||240;
+ if(view.width!==vw||view.height!==vh){view.width=vw;view.height=vh}
+ vctx.drawImage(img,0,0,vw,vh);
+ if(!S.detecting)return;
+ wctx.drawImage(img,0,0,work.width,work.height);
+ var r=detect(),sx=vw/work.width,sy=vh/work.height;
+ if(r){
+  vctx.lineWidth=3;vctx.strokeStyle='#fff';vctx.strokeRect((r.x-3)*sx,(r.y-3)*sy,(r.w+6)*sx,(r.h+6)*sy);
+  vctx.fillStyle='#000';vctx.fillRect((r.x-3)*sx,(r.y-3)*sy-20,90,20);vctx.fillStyle='#fff';vctx.font='14px sans-serif';
+  vctx.fillText(NAMES[r.c]+' '+Math.round(r.conf*100)+'%',(r.x-1)*sx,(r.y-3)*sy-5);
+ }
+ var name=r?NAMES[r.c]:'none';
+ if(name===S.cand)S.candN++;else{S.cand=name;S.candN=1}
+ if(S.candN>=STABLE_N&&name!==S.stable){S.stable=name;onStable(name,r?r.conf:0)}
+ else if(S.candN>=STABLE_N)show(S.stable,r?r.conf:0,false);
+ if(r)S.lastTime=new Date();
+}
+function resetDetect(){S.stable='none';S.cand='none';S.candN=0;S.spoken=null;if(!S.detecting)show('none',0,true)}
+
+/* ---------- Result display + announcement ---------- */
+function show(name,conf,idle){
+ $('lamp').className='lamp '+(name==='none'?'':name);
+ var label=idle?'Detection stopped':name==='none'?'No traffic light detected':'Signal: '+name.charAt(0).toUpperCase()+name.slice(1);
+ $('sigText').textContent=label;
+ var cp=name==='none'||idle?'–':Math.round(conf*100)+'%';
+ $('confText').textContent='Confidence: '+cp;
+ $('dSig').textContent=name==='none'||idle?(idle?'–':'None'):name.charAt(0).toUpperCase()+name.slice(1);
+ $('dConf').textContent=cp;
+ $('dLast').textContent=S.lastTime?S.lastTime.toLocaleTimeString():'–';
+}
+function onStable(name,conf){
+ show(name,conf,false);
+ if(name==='none')return;
+ if(S.voice&&S.spoken!==name){S.spoken=name;speak(phrase(name))}
+}
+
+})();
+</script>
+</body>
+</html>

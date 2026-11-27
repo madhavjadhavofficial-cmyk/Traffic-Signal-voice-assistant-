@@ -1,0 +1,7 @@
+{
+  "appId": "com.madhav.signalvoice",
+  "appName": "Signal Voice",
+  "webDir": "www",
+  "server": { "androidScheme": "http", "cleartext": true },
+  "android": { "allowMixedContent": true }
+}
